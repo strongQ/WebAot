@@ -2,12 +2,15 @@
 using FreeScheduler;
 using System.Data;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 using WebAOT;
 using WebAOT.Entities;
 using XT.Common.Config;
 using XT.FeSql;
 using XT.FeSql.Extensions;
 using XT.FeSql.Models;
+using XT.Task;
+using XT.Task.Extensions;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -39,42 +42,14 @@ var config = new XT.FeSql.Models.XTDbConfig
 };
 builder.Services.AddXTDbSetup(config);
 
+builder.Services.AddXTTaskSetup(true,config);
+
 //使用 FreeSql 持久化，以下两行必须执行（FreeRedis 无要求）
 Enum.GetValues(typeof(TaskInterval));
 Enum.GetValues(typeof(FreeScheduler.TaskStatus));
-var fsql = new FreeSql.FreeSqlBuilder()
-    .UseConnectionString(config.Dbs[0].DbType, config.Dbs[0].ConnectionString)
-    .UseAutoSyncStructure(true)
-    .UseNoneCommandParameter(true)
-    .UseMonitorCommand(cmd => Console.WriteLine(cmd.CommandText + "\r\n"))
-    .Build();
-Scheduler scheduler = new FreeSchedulerBuilder()
-    .OnExecuting(task =>
-    {
-        Console.WriteLine($"[{DateTime.Now.ToString("HH:mm:ss.fff")}] {task.Topic} 被执行");
-        task.Remark("log..");
-    })
-    .UseStorage(fsql)
-    //.UseCluster(redis, new ClusterOptions
-    //{
-    //    Name = Environment.GetCommandLineArgs().FirstOrDefault(a => a.StartsWith("--name="))?.Substring(7),
-    //    HeartbeatInterval = 2,
-    //    OfflineSeconds = 5,
-    //})
-    .Build();
-if (Datafeed.GetPage(scheduler, null, null, null, null).Total == 0)
-{
-    scheduler.AddTask("[系统预留]清理任务数据", "86400", -1, 3600);
-    scheduler.AddTaskRunOnWeek("（周一）武林大会", "json", -1, "1:12:00:00");
-    scheduler.AddTaskRunOnWeek("（周日）亲子活动", "json", -1, "0:00:00:00");
-    scheduler.AddTaskRunOnWeek("（周六）社交活动", "json", -1, "6:00:00:00");
-    scheduler.AddTaskRunOnMonth("月尾最后一天", "json", -1, "-1:16:00:00");
-    scheduler.AddTaskRunOnMonth("月初第一天", "json", -1, "1:00:00:00");
-    scheduler.AddTask("定时20秒", "json", 10, 20);
-    scheduler.AddTask("测试任务1", "json", new[] { 10, 30, 60, 100, 150, 200 });
-}
-builder.Services.AddSingleton(fsql);
-builder.Services.AddSingleton(scheduler);
+
+
+
 
 var app = builder.Build();
 
@@ -113,15 +88,25 @@ sqlapi.MapGet("/{id}", (int id) =>
 });
 
 
-var applicationLifeTime = app.Services.GetService<IHostApplicationLifetime>();
-applicationLifeTime.ApplicationStopping.Register(() =>
-{
-    scheduler.Dispose();
-    //redis.Dispose();
-    fsql.Dispose();
-});
+//var applicationLifeTime = app.Services.GetService<IHostApplicationLifetime>();
+//applicationLifeTime.ApplicationStopping.Register(() =>
+//{
+//    scheduler.Dispose();
+//    //redis.Dispose();
+//    fsql.Dispose();
+//});
+var scheduler=app.Services.GetService<Scheduler>();
+scheduler.AddDefaultTask();
 
 app.UseFreeSchedulerUI("/task/");
+
+TaskAction.ExecuteEvent += TaskAction_ExecuteEvent;
+
+void TaskAction_ExecuteEvent(object? sender, TaskInfo e)
+{
+    Console.WriteLine($"[{DateTime.Now.ToString("HH:mm:ss.fff")}] {e.Topic} 被执行");
+    e.Remark("log");
+}
 
 app.Run("http://0.0.0.0:20071");
 
