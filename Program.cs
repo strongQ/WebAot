@@ -1,8 +1,13 @@
 
 using FreeScheduler;
+using System.Data;
 using System.Text.Json.Serialization;
 using WebAOT;
 using WebAOT.Entities;
+using XT.Common.Config;
+using XT.FeSql;
+using XT.FeSql.Extensions;
+using XT.FeSql.Models;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -13,11 +18,32 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
 });
 
-//Ê¹ï¿½ï¿½ FreeSql ï¿½Ö¾Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð±ï¿½ï¿½ï¿½Ö´ï¿½Ð£ï¿½FreeRedis ï¿½ï¿½Òªï¿½ï¿½
+XTDbContext.AopSqlEvent += (o, e) =>
+{
+    Console.WriteLine(e);
+};
+var config = new XT.FeSql.Models.XTDbConfig
+{
+    IsSqlAOP = true,
+    Dbs = new List<XT.FeSql.Models.DataBaseOperate>
+    {
+        new XT.FeSql.Models.DataBaseOperate
+        {
+            DbType=FreeSql.DataType.PostgreSQL,
+            ConnectionString="Host=xx; Port=xx; Database=xx; Username=xx; Password=xx",
+            IsMain=true,
+            Enabled=true
+        }
+
+    }
+};
+builder.Services.AddXTDbSetup(config);
+
+//Ê¹ÓÃ FreeSql ³Ö¾Ã»¯£¬ÒÔÏÂÁ½ÐÐ±ØÐëÖ´ÐÐ£¨FreeRedis ÎÞÒªÇó£©
 Enum.GetValues(typeof(TaskInterval));
 Enum.GetValues(typeof(FreeScheduler.TaskStatus));
 var fsql = new FreeSql.FreeSqlBuilder()
-    .UseConnectionString(FreeSql.DataType.PostgreSQL, $"Host=xx; Port=xx; Database=xx; Username=xx; Password=xx")
+    .UseConnectionString(config.Dbs[0].DbType, config.Dbs[0].ConnectionString)
     .UseAutoSyncStructure(true)
     .UseNoneCommandParameter(true)
     .UseMonitorCommand(cmd => Console.WriteLine(cmd.CommandText + "\r\n"))
@@ -25,7 +51,7 @@ var fsql = new FreeSql.FreeSqlBuilder()
 Scheduler scheduler = new FreeSchedulerBuilder()
     .OnExecuting(task =>
     {
-        Console.WriteLine($"[{DateTime.Now.ToString("HH:mm:ss.fff")}] {task.Topic} ï¿½ï¿½Ö´ï¿½ï¿½");
+        Console.WriteLine($"[{DateTime.Now.ToString("HH:mm:ss.fff")}] {task.Topic} ±»Ö´ÐÐ");
         task.Remark("log..");
     })
     .UseStorage(fsql)
@@ -38,14 +64,14 @@ Scheduler scheduler = new FreeSchedulerBuilder()
     .Build();
 if (Datafeed.GetPage(scheduler, null, null, null, null).Total == 0)
 {
-    scheduler.AddTask("[ÏµÍ³Ô¤ï¿½ï¿½]ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½", "86400", -1, 3600);
-    scheduler.AddTaskRunOnWeek("ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½Ö´ï¿½ï¿½", "json", -1, "1:12:00:00");
-    scheduler.AddTaskRunOnWeek("ï¿½ï¿½ï¿½ï¿½ï¿½Õ£ï¿½ï¿½ï¿½ï¿½Ó»î¶¯", "json", -1, "0:00:00:00");
-    scheduler.AddTaskRunOnWeek("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ç½»ï¿½î¶¯", "json", -1, "6:00:00:00");
-    scheduler.AddTaskRunOnMonth("ï¿½ï¿½Î²ï¿½ï¿½ï¿½Ò»ï¿½ï¿½", "json", -1, "-1:16:00:00");
-    scheduler.AddTaskRunOnMonth("ï¿½Â³ï¿½ï¿½ï¿½Ò»ï¿½ï¿½", "json", -1, "1:00:00:00");
-    scheduler.AddTask("ï¿½ï¿½Ê±20ï¿½ï¿½", "json", 10, 20);
-    scheduler.AddTask("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½1", "json", new[] { 10, 30, 60, 100, 150, 200 });
+    scheduler.AddTask("[ÏµÍ³Ô¤Áô]ÇåÀíÈÎÎñÊý¾Ý", "86400", -1, 3600);
+    scheduler.AddTaskRunOnWeek("£¨ÖÜÒ»£©ÎäÁÖ´ó»á", "json", -1, "1:12:00:00");
+    scheduler.AddTaskRunOnWeek("£¨ÖÜÈÕ£©Ç××Ó»î¶¯", "json", -1, "0:00:00:00");
+    scheduler.AddTaskRunOnWeek("£¨ÖÜÁù£©Éç½»»î¶¯", "json", -1, "6:00:00:00");
+    scheduler.AddTaskRunOnMonth("ÔÂÎ²×îºóÒ»Ìì", "json", -1, "-1:16:00:00");
+    scheduler.AddTaskRunOnMonth("ÔÂ³õµÚÒ»Ìì", "json", -1, "1:00:00:00");
+    scheduler.AddTask("¶¨Ê±20Ãë", "json", 10, 20);
+    scheduler.AddTask("²âÊÔÈÎÎñ1", "json", new[] { 10, 30, 60, 100, 150, 200 });
 }
 builder.Services.AddSingleton(fsql);
 builder.Services.AddSingleton(scheduler);
@@ -68,15 +94,21 @@ todosApi.MapGet("/{id}", (int id) =>
         : Results.NotFound());
 
 var sqlapi = app.MapGroup("/sqls");
-sqlapi.MapGet("/", () =>
+sqlapi.MapGet("/", async () =>
 {
-    var users = SqlStartup.Fsql.Select<SysUser>().ToList();
+   var dbcontext= app.Services.GetService<XTDbContext>();
+    var db = dbcontext.GetDb();
+   var rep= db.GetRepository<SysUser>();
+   var users=await rep.Select.ToListAsync();
+   
     return users.ToArray();
 });
 
 sqlapi.MapGet("/{id}", (int id) =>
 {
-   var dta= SqlStartup.Fsql.Ado.QuerySingle<SysUser>("select * from net_sysuser");
+    var dbcontext = app.Services.GetService<XTDbContext>();
+    var db = dbcontext.GetSqlDb<TwoFlag>();
+    var dta= db.Ado.QuerySingle<SysUser>("select * from net_sysuser");
    return Results.Ok(dta);
 });
 
